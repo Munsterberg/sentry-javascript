@@ -23,7 +23,7 @@ const jscodeshiftNamespace = jscsTypes;
 const jscs = jscodeshiftDefault || jscodeshiftNamespace;
 
 // These are types not in the TS sense, but in the instance-of-a-Type-class sense
-const { ExportSpecifier, Identifier, Node, VariableDeclaration, VariableDeclarator } = jscs;
+const { ExportSpecifier, Identifier, Node, VariableDeclaration, VariableDeclarator, ExportDefaultDeclaration } = jscs;
 
 export type AST<T = jscsTypes.ASTNode> = jscsTypes.Collection<T>;
 type ASTPath<T = jscsTypes.ASTNode> = jscsTypes.ASTPath<T>;
