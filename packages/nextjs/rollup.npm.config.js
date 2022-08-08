@@ -14,10 +14,7 @@ export default [
   ),
   ...makeNPMConfigVariants(
     makeBaseNPMConfig({
-      entrypoints: [
-        'src/config/templates/prefixLoaderTemplate.ts',
-        'src/config/templates/dataFetchersLoaderTemplate.ts',
-      ],
+      entrypoints: ['src/config/templates/prefixLoaderTemplate.ts'],
 
       packageSpecificConfig: {
         output: {

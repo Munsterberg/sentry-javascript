@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import * as jscsTypes from 'jscodeshift';
 import { default as jscodeshiftDefault } from 'jscodeshift';
 
@@ -23,13 +24,9 @@ const jscodeshiftNamespace = jscsTypes;
 const jscs = jscodeshiftDefault || jscodeshiftNamespace;
 
 // These are types not in the TS sense, but in the instance-of-a-Type-class sense
-const { ExportSpecifier, Identifier, Node, VariableDeclaration, VariableDeclarator } = jscs;
+const { ExportSpecifier, ExportNamedDeclaration, ExportAllDeclaration } = jscs;
 
 export type AST<T = jscsTypes.ASTNode> = jscsTypes.Collection<T>;
-type ASTPath<T = jscsTypes.ASTNode> = jscsTypes.ASTPath<T>;
-type IdentifierNode = jscsTypes.Identifier;
-type ExportSpecifierNode = jscsTypes.ExportSpecifier;
-type VariableDeclarationNode = jscsTypes.VariableDeclaration;
 
 /**
  * Create an AST based on the given code.
@@ -46,174 +43,141 @@ export function makeAST(code: string, isTS: boolean): AST {
   return jscs(code, { parser });
 }
 
-/**
- * Find all nodes which represent Identifiers with the given name
- *
- * @param ast The code, in AST form
- * @param name The Identifier name to search for
- * @returns A collection of NodePaths pointing to any nodes which were found
- */
-export function findIdentifiers(ast: AST, name: string): AST<IdentifierNode> {
-  const identifierFilter = function (path: ASTPath<IdentifierNode>): boolean {
-    // Check that what we have is indeed an Identifier, and that the name matches
-    //
-    // Note: If we were being super precise about this, we'd also check the context in which the identifier is being
-    // used, because there are some cases where we actually don't want to be renaming things (if the identifier is being
-    // used to name a class property, for example). But the chances that someone is going to have a class property in a
-    // nextjs page file with the same name as one of the canonical functions are slim to none, so for simplicity we can
-    // stop filtering here. If this ever becomes a problem, more precise filter checks can be found in a comment at the
-    // bottom of this file.
-    return path.node.name === name;
-  };
+function getExportIdentifiersFromRestElement(restElement: jscsTypes.RestElement): string[] {
+  const identifiers: string[] = [];
 
-  return ast.find(Identifier).filter(identifierFilter);
-}
-
-/**
- * Find all nodes which are declarations of variables with the given name
- *
- * @param ast The code, in AST form
- * @param name The variable name to search for
- * @returns A collection of NodePaths pointing to any nodes which were found
- */
-export function findDeclarations(ast: AST, name: string): AST<VariableDeclarationNode> {
-  // Check for a structure of the form
-  //
-  //     node: VariableDeclaration
-  //      \
-  //       declarations: VariableDeclarator[]
-  //        \
-  //         0 : VariableDeclarator
-  //          \
-  //           id: Identifier
-  //            \
-  //             name: string
-  //
-  // where `name` matches the given name.
-  const declarationFilter = function (path: ASTPath<VariableDeclarationNode>): boolean {
-    return (
-      path.node.declarations.length === 1 &&
-      VariableDeclarator.check(path.node.declarations[0]) &&
-      Identifier.check(path.node.declarations[0].id) &&
-      path.node.declarations[0].id.name === name
-    );
-  };
-
-  return ast.find(VariableDeclaration).filter(declarationFilter);
-}
-
-/**
- * Find all nodes which are exports of variables with the given name
- *
- * @param ast The code, in AST form
- * @param name The variable name to search for
- * @returns A collection of NodePaths pointing to any nodes which were found
- */
-export function findExports(ast: AST, name: string): AST<ExportSpecifierNode> {
-  const exportFilter = function (path: ASTPath<ExportSpecifierNode>): boolean {
-    return ExportSpecifier.check(path.node) && path.node.exported.name === name;
-  };
-
-  return ast.find(ExportSpecifier).filter(exportFilter);
-}
-
-/**
- * Remove comments from all nodes in the given AST.
- *
- * Note: Comments are not nodes in and of themselves, but are instead attached to the nodes above and below them.
- *
- * @param ast The code, in AST form
- */
-export function removeComments(ast: AST): void {
-  const nodesWithComments = ast.find(Node).filter(path => !!path.node.comments);
-  nodesWithComments.forEach(path => (path.node.comments = null));
-}
-
-/**
- * Find an unused identifier name in the AST by repeatedly adding underscores to the beginning of the given original
- * name until we find one which hasn't already been taken.
- *
- * @param userAST The AST to search
- * @param origName The original name we want to alias
- * @returns
- */
-export function findAvailibleAlias(userAST: AST, origName: string): string {
-  let foundAvailableName = false;
-  let newName = origName;
-
-  while (!foundAvailableName) {
-    // Prefix the original function name (or the last name we tried) with an underscore and search for identifiers with
-    // the new name in the AST
-    newName = `_${newName}`;
-    const existingIdentifiers = findIdentifiers(userAST, newName);
-
-    // If we haven't found anything, we're good to go
-    foundAvailableName = existingIdentifiers.length === 0;
+  if (restElement.argument.type === 'Identifier') {
+    identifiers.push(restElement.argument.name);
+  } else if (restElement.argument.type === 'ArrayPattern') {
+    identifiers.push(...getExportIdentifiersFromArrayPattern(restElement.argument));
+  } else if (restElement.argument.type === 'ObjectPattern') {
+    identifiers.push(...getExportIdentifiersFromObjectPattern(restElement.argument));
+  } else if (restElement.argument.type === 'RestElement') {
+    identifiers.push(...getExportIdentifiersFromRestElement(restElement.argument));
   }
 
-  return newName;
+  return identifiers;
+}
+
+function getExportIdentifiersFromArrayPattern(arrayPattern: jscsTypes.ArrayPattern): string[] {
+  const identifiers: string[] = [];
+
+  arrayPattern.elements.forEach(element => {
+    if (element?.type === 'Identifier') {
+      identifiers.push(element.name);
+    } else if (element?.type === 'ObjectPattern') {
+      identifiers.push(...getExportIdentifiersFromObjectPattern(element));
+    } else if (element?.type === 'ArrayPattern') {
+      identifiers.push(...getExportIdentifiersFromArrayPattern(element));
+    } else if (element?.type === 'RestElement') {
+      identifiers.push(...getExportIdentifiersFromRestElement(element));
+    }
+  });
+
+  return identifiers;
+}
+
+function getExportIdentifiersFromObjectPattern(objectPatternNode: jscsTypes.ObjectPattern): string[] {
+  const identifiers: string[] = [];
+
+  objectPatternNode.properties.forEach(property => {
+    if (property.type === 'Property') {
+      if (property.value.type === 'Identifier') {
+        identifiers.push(property.value.name);
+      } else if (property.value.type === 'ObjectPattern') {
+        identifiers.push(...getExportIdentifiersFromObjectPattern(property.value));
+      } else if (property.value.type === 'ArrayPattern') {
+        identifiers.push(...getExportIdentifiersFromArrayPattern(property.value));
+      } else if (property.value.type === 'RestElement') {
+        identifiers.push(...getExportIdentifiersFromRestElement(property.value));
+      }
+      // @ts-ignore seems to be a bug in the jscs typing
+    } else if (property.type === 'RestElement') {
+      // @ts-ignore seems to be a bug in the jscs typing
+      identifiers.push(...getExportIdentifiersFromRestElement(property));
+    }
+  });
+
+  return identifiers;
 }
 
 /**
- * More precise version of `identifierFilter`, used in `findIdentifiers`, which accounts for context. See note in
- * `findIdentifiers` above.
+ * TODO
  */
+export function getExportIdentifiers(ast: AST): string[] {
+  const identifiers: string[] = [];
 
-// const {
-//   AssignmentExpression,
-//   CallExpression,
-//   ExportSpecifier,
-//   FunctionDeclaration,
-//   Identifier,
-//   MemberExpression,
-//   Node,
-//   Property,
-//   ReturnStatement,
-//   VariableDeclaration,
-//   VariableDeclarator,
-// } = jscs;
-//
-// const identifierFilter = function (path: ASTPath<Identifier>): boolean {
-//   const node = path.node;
-//   const parentPath = path.parent as ASTPath;
-//   const parent = parentPath.node;
-//
-//   const hasCorrectName = node.name === name;
-//
-//   // Check that the identifier is being used in a valid context, one in which we do in fact want to replace it.
-//   //
-//   // Note: There are a million ways identifiers can be used - this is just a subset, but it should hit 99% of cases.
-//   // If anyone every files an issue because we're doing an incomplete job of transforming their code, get a
-//   // representative sample from them and throw it into https://astexplorer.net/ or
-//   // https://rajasegar.github.io/ast-finder/ (making sure in either case to set the parser to `recast`) to figure out
-//   // what to add below. (Find the `Identifier` node and note its parent's `type` value and the name of the key under
-//   // which it lives.) Note that neither tool seems to be able to handle the `export` keyword for some reason, but for
-//   // anything other than the case already included below, `ExportSpecifier` will be at least the grandparent; given
-//   // that we only care about recognizing the parent, we can just remove `export` from the sample code and it won't
-//   // make any difference to the part we care about.
-//   //
-//   // In all of the examples in the comments below, the identifer we're interested in is `someFunc`.
-//   const contextIsValid =
-//     // `export const someFunc = ...` or `const someFunc = ...` or `let someFunc`
-//     (VariableDeclarator.check(parent) && parent.id === node) ||
-//     // `export { someFunc }` or `export { someOtherFunc as someFunc }`
-//     (ExportSpecifier.check(parent) && parent.exported === node) ||
-//     // `export function someFunc() { ... }` or `function someFunc() { ... }`
-//     (FunctionDeclaration.check(parent) && parent.id === node) ||
-//     // `someFunc = ...`
-//     (AssignmentExpression.check(parent) && parent.left === node) ||
-//     // `someVariable = someFunc`
-//     (AssignmentExpression.check(parent) && parent.right === node) ||
-//     // `const someVariable = someFunc`
-//     (VariableDeclarator.check(parent) && parent.init === node) ||
-//     // `someFunc.someProperty`
-//     (MemberExpression.check(parent) && parent.object === node) ||
-//     // `{ someProperty: someFunc }`
-//     (Property.check(parent) && parent.value === node) ||
-//     // `someOtherFunc(someFunc)`
-//     (CallExpression.check(parent) && parent.arguments.includes(node)) ||
-//     // `return someFunc`
-//     (ReturnStatement.check(parent) && parent.argument === node);
-//
-//   return hasCorrectName && contextIsValid;
-// };
+  const namedExportDeclarationNodes = ast
+    .find(ExportNamedDeclaration)
+    .nodes()
+    .map(namedExportDeclarationNode => namedExportDeclarationNode.declaration);
+
+  namedExportDeclarationNodes
+    .filter(
+      (declarationNode): declarationNode is jscsTypes.VariableDeclaration =>
+        declarationNode !== null && declarationNode.type === 'VariableDeclaration',
+    )
+    .map(variableDeclarationNode => variableDeclarationNode.declarations)
+    .reduce((prev, curr) => [...prev, ...curr], []) // flatten
+    .forEach(declarationNode => {
+      if (declarationNode.type === 'Identifier' || declarationNode.type === 'JSXIdentifier') {
+        identifiers.push(declarationNode.name);
+      } else if (declarationNode.type === 'TSTypeParameter') {
+        // noop
+      } else if (declarationNode.id.type === 'Identifier') {
+        identifiers.push(declarationNode.id.name);
+      } else if (declarationNode.id.type === 'ObjectPattern') {
+        identifiers.push(...getExportIdentifiersFromObjectPattern(declarationNode.id));
+      } else if (declarationNode.id.type === 'ArrayPattern') {
+        identifiers.push(...getExportIdentifiersFromArrayPattern(declarationNode.id));
+      } else if (declarationNode.id.type === 'RestElement') {
+        identifiers.push(...getExportIdentifiersFromRestElement(declarationNode.id));
+      }
+    });
+
+  namedExportDeclarationNodes
+    .filter(
+      (declarationNode): declarationNode is jscsTypes.ClassDeclaration | jscsTypes.FunctionDeclaration =>
+        declarationNode !== null && declarationNode.type === 'ClassDeclaration',
+    )
+    .map(node => node.id)
+    .filter((id): id is jscsTypes.Identifier => id !== null && id.type === 'Identifier')
+    .forEach(id => identifiers.push(id.name));
+
+  namedExportDeclarationNodes
+    .filter(
+      (declarationNode): declarationNode is jscsTypes.ClassDeclaration | jscsTypes.FunctionDeclaration =>
+        declarationNode !== null && declarationNode.type === 'FunctionDeclaration',
+    )
+    .map(node => node.id)
+    .filter((id): id is jscsTypes.Identifier => id !== null && id.type === 'Identifier')
+    .forEach(id => identifiers.push(id.name));
+
+  ast
+    .find(ExportSpecifier)
+    .nodes()
+    .forEach(specifier => {
+      if (specifier.exported.name !== 'default') {
+        identifiers.push(specifier.exported.name);
+      }
+    });
+
+  ast
+    .find(ExportAllDeclaration)
+    .nodes()
+    .forEach(declaration => {
+      if (declaration.exported) {
+        identifiers.push(declaration.exported.name);
+      }
+    });
+
+  return [...new Set(identifiers)];
+}
+
+/**
+ * TODO
+ */
+export function hasDefaultExport(_ast: AST): boolean {
+  // TODO
+  return true;
+}
