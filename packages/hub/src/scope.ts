@@ -465,7 +465,7 @@ export class Scope implements ScopeInterface {
       event.level = this._level;
     }
     if (this._transactionName) {
-      event.transaction = this._transactionName;
+      event.transaction = event.transaction || this._transactionName;
     }
 
     // We want to set the trace context for normal events only if there isn't already
