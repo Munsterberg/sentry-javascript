@@ -26,7 +26,7 @@ jest.mock('@sentry/browser', () => {
   };
 });
 
-describe('Angular Tracing', () => {
+describe.skip('Angular Tracing', () => {
   const startTransaction = jest.fn();
 
   describe('instrumentAngularRouting', () => {

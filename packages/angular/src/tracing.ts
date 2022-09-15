@@ -75,11 +75,17 @@ export class TraceService implements OnDestroy {
       let activeTransaction = getActiveTransaction();
 
       if (!activeTransaction && stashedStartTransactionOnLocationChange) {
+        console.log('strippedUrl', strippedUrl);
+        console.log('stashedStartTransaction', stashedStartTransaction);
+
+        debugger;
         activeTransaction = stashedStartTransaction({
           name: strippedUrl,
           op: 'navigation',
           metadata: { source: 'url' },
         });
+
+        console.log('activeTransaction', activeTransaction);
       }
 
       if (activeTransaction) {
@@ -113,8 +119,9 @@ export class TraceService implements OnDestroy {
     filter((event): event is ResolveEnd => event instanceof ResolveEnd),
     tap(event => {
       const route = getParameterizedRouteFromSnapshot(event.state.root);
-
       const transaction = getActiveTransaction();
+      console.log('ResEnd!', transaction);
+
       // TODO (v8 / #5416): revisit the source condition. Do we want to make the parameterized route the default?
       if (transaction && transaction.metadata.source === 'url') {
         transaction.setName(route, 'route');

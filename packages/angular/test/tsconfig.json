@@ -2,7 +2,7 @@
 // it's purely a placeholder to satisfy VSCode.
 
 {
-  "extends": "../tsconfig.test.json",
+  "extends": "../tsconfig.spec.json",
 
   "include": ["./**/*"]
 }

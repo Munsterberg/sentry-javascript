@@ -2,7 +2,7 @@ import * as SentryBrowser from '@sentry/browser';
 
 import { init } from '../src/sdk';
 
-describe('init', () => {
+describe.skip('init', () => {
   it('sets the Angular version (if available) in the global scope', () => {
     const setContextSpy = jest.spyOn(SentryBrowser, 'setContext');
 
