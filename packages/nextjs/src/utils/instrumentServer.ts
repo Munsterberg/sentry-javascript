@@ -329,14 +329,21 @@ function makeWrappedMethodForGettingParameterizedPath(
   origMethod: ApiPageEnsurer | PageComponentFinder,
 ): WrappedApiPageEnsurer | WrappedPageComponentFinder {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wrappedMethod = async function (this: Server, parameterizedPath: string, ...args: any[]): Promise<any> {
+  const wrappedMethod = async function (
+    this: Server,
+    parameterizedPath: string | { pathname: string },
+    ...args: any[]
+  ): Promise<any> {
     const transaction = getActiveTransaction();
 
     // replace specific URL with parameterized version
     if (transaction && transaction.metadata.requestPath) {
       const origPath = transaction.metadata.requestPath;
-      const newName = transaction.name.replace(origPath, parameterizedPath);
-      transaction.setName(newName, 'route');
+      const newPath = typeof parameterizedPath === 'string' ? parameterizedPath : parameterizedPath.pathname;
+      if (newPath) {
+        const newName = transaction.name.replace(origPath, newPath);
+        transaction.setName(newName, 'route');
+      }
     }
 
     return origMethod.call(this, parameterizedPath, ...args);
