@@ -51,7 +51,11 @@ export type AugmentedNextApiResponse = NextApiResponse & {
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 export const withSentry = (origHandler: NextApiHandler): WrappedNextApiHandler => {
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  return async (req, res) => {
+  const wrappedHandler: WrappedNextApiHandler = async function (
+    this: WrappedNextApiHandler,
+    req: NextApiRequest,
+    res: NextApiResponse,
+  ) {
     // first order of business: monkeypatch `res.end()` so that it will wait for us to send events to sentry before it
     // fires (if we don't do this, the lambda will close too early and events will be either delayed or lost)
     // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -182,6 +186,8 @@ export const withSentry = (origHandler: NextApiHandler): WrappedNextApiHandler =
     // a promise here rather than a real result, and it saves us the overhead of an `await` call.)
     return boundHandler();
   };
+
+  return wrappedHandler;
 };
 
 type ResponseEndMethod = AugmentedNextApiResponse['end'];
