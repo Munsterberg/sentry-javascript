@@ -187,6 +187,10 @@ export const withSentry = (origHandler: NextApiHandler): WrappedNextApiHandler =
     return boundHandler();
   };
 
+  // Flag the original handler as already having been wrapped, to prevent it from being wrapped twice (which it could
+  // be, if someone has already wrapped it manually and then we come along and auto-wrap it)
+  wrappedHandler.__sentry_wrapped__ = true;
+
   return wrappedHandler;
 };
 
